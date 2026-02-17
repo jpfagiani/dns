@@ -1,0 +1,108 @@
+#!/usr/sbin/nft -f
+
+flush ruleset
+
+############################
+# TABELA NAT
+############################
+
+table ip nat {
+
+    chain prerouting {
+        type nat hook prerouting priority -100;
+    }
+
+    chain postrouting {
+        type nat hook postrouting priority 100;
+
+        # NAT 1:1 RANGE 100-200
+        ip saddr 192.168.0.100-192.168.0.200 oif "eth0" \
+        snat to ip saddr map {
+            for i in {100..200}; do
+			echo "192.168.0.$i : 10.14.29.$i,"
+			done
+        }
+
+        # Demais usam IP principal
+        ip saddr 192.168.0.0/24 oif "eth0" snat to 10.14.29.9
+    }
+}
+
+############################
+# TABELA FILTER
+############################
+
+table inet firewall {
+
+    ########################
+    # BLOQUEIO STREAMING
+    ########################
+
+    set blocked_tcp {
+        type inet_service
+        elements = { 1935, 554, 1755, 7070 }
+    }
+
+    set blocked_udp {
+        type inet_service
+        elements = { 1935, 554, 1755, 7070 }
+    }
+
+    chain input {
+        type filter hook input priority 0;
+        policy drop;
+
+        iif lo accept
+        ct state established,related accept
+
+        # Administração via LAN
+        iif "eth1" tcp dport 22 accept
+
+        ip protocol icmp accept
+    }
+
+    chain forward {
+        type filter hook forward priority 0;
+        policy drop;
+
+        ct state established,related accept
+
+        ########################################
+        # HORÁRIOS LIBERADOS
+        ########################################
+
+        # Segunda a Sexta
+        meta weekday { mon, tue, wed, thu, fri } \
+        meta hour { 5-6, 11-12, 17-22 } accept
+
+        # Finais de semana liberados
+        meta weekday { sat, sun } accept
+
+        ########################################
+        # BLOQUEIO FORA DOS HORÁRIOS
+        ########################################
+
+        # Bloqueio QUIC (YouTube moderno)
+        udp dport 443 drop
+
+        # Bloqueio portas streaming
+        tcp dport @blocked_tcp drop
+        udp dport @blocked_udp drop
+
+        # Bloqueio UDP alto (rádios e mídia)
+        udp dport 1024-65535 drop
+
+        ########################################
+        # Liberação Web normal
+        ########################################
+
+        tcp dport { 80, 443 } accept
+        udp dport 53 accept
+        tcp dport 53 accept
+    }
+
+    chain output {
+        type filter hook output priority 0;
+        policy accept;
+    }
+}

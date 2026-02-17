@@ -1,0 +1,25 @@
+#edita o /etc/sysctl
+
+echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+sysctl -p
+
+
+#edita /etc/network/interfaces
+
+for i in {100..200}; do
+  ip addr add 10.14.29.$i/24 dev eth0
+done
+
+
+auto eth0
+iface eth0 inet static
+    address 10.14.29.9
+    netmask 255.255.255.0
+    gateway 10.14.29.1
+
+    # IPs adicionais para NAT 1:1
+    up for i in {100..200}; do 
+	ip addr add 10.14.29.$i/24 dev eth0;
+	done
+
+

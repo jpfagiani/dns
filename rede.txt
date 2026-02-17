@@ -1,0 +1,48 @@
+systemctl disable NetworkManager 2>/dev/null
+systemctl enable systemd-networkd
+systemctl start systemd-networkd
+
+
+sudo nano /etc/systemd/network/10-eth0.network
+
+
+[Match]
+Name=eth0
+
+[Network]
+Address=10.14.29.9/24
+Gateway=10.14.29.1
+DNS=10.14.8.16
+DNS=10.14.8.20
+DNS=10.1.6.222
+DNS=8.8.8.8
+DNS=8.8.4.4
+
+# Range para NAT 1:1
+Address=10.14.29.100/24
+Address=10.14.29.101/24
+Address=10.14.29.102/24
+Address=10.14.29.103/24
+Address=10.14.29.104/24
+Address=10.14.29.105/24
+Address=10.14.29.106/24
+Address=10.14.29.107/24
+Address=10.14.29.108/24
+Address=10.14.29.109/24
+
+
+Address=10.14.29.100/24
+Address=10.14.29.101/24
+...
+Address=10.14.29.200/24
+
+
+for i in {100..200}; do
+echo "Address=10.14.29.$i/24"
+done
+
+
+systemctl restart systemd-networkd
+
+ip a | grep 10.14.29
+

@@ -1,0 +1,163 @@
+sudo nano /etc/nftables.conf
+
+
+#!/usr/sbin/nft -f
+
+flush ruleset
+
+############################
+# VARIÁVEIS
+############################
+
+define WAN = "eth0"
+define LAN = "eth1"
+
+define LAN_NET = 192.168.0.0/24
+define NAT_RANGE = 192.168.0.100-192.168.0.200
+
+############################
+# TABELA NAT
+############################
+
+table ip nat {
+
+    chain prerouting {
+        type nat hook prerouting priority -100;
+    }
+
+    chain postrouting {
+        type nat hook postrouting priority 100;
+
+        # NAT 1:1 PROFISSIONAL (range automático)
+        ip saddr 192.168.0.100-192.168.0.200 oif $WAN \
+        snat to ip saddr map @natmap
+
+        # Demais máquinas usam IP principal
+        ip saddr $LAN_NET oif $WAN snat to 10.14.29.9
+    }
+
+    map natmap {
+        type ipv4_addr : ipv4_addr;
+        elements = {
+            192.168.0.100 : 10.14.29.100,
+            192.168.0.101 : 10.14.29.101,
+            192.168.0.102 : 10.14.29.102,
+            192.168.0.103 : 10.14.29.103,
+            192.168.0.104 : 10.14.29.104,
+            192.168.0.105 : 10.14.29.105
+            # continuar até 200
+        }
+    }
+}
+
+############################
+# TABELA FILTER
+############################
+
+table inet firewall {
+
+    set blocked_tcp {
+        type inet_service
+        elements = { 1935, 554, 1755, 7070 }
+    }
+
+    chain input {
+        type filter hook input priority 0;
+        policy drop;
+
+        iif lo accept
+        ct state established,related accept
+
+        iif $LAN tcp dport 22 accept
+        udp dport 123 accept   # NTP
+        udp dport 53 accept    # DNS
+        tcp dport 53 accept
+
+        ip protocol icmp accept
+    }
+
+    chain forward {
+        type filter hook forward priority 0;
+        policy drop;
+
+        ct state established,related accept
+
+        ########################################
+        # LIBERA FINAIS DE SEMANA
+        ########################################
+        meta weekday { sat, sun } accept
+
+        ########################################
+        # LIBERA HORÁRIOS PERMITIDOS
+        ########################################
+        meta weekday { mon, tue, wed, thu, fri } \
+        meta hour { 5-6, 11-12, 17-22 } accept
+
+        ########################################
+        # BLOQUEIOS CORPORATIVOS
+        ########################################
+
+        # Bloqueio QUIC (YouTube moderno)
+        udp dport 443 log prefix "QUIC-BLOCK: " drop
+
+        # Bloqueio streaming clássico
+        tcp dport @blocked_tcp log prefix "STREAM-TCP: " drop
+        udp dport @blocked_tcp log prefix "STREAM-UDP: " drop
+
+        # Bloqueio VPN comuns
+        udp dport {1194, 500, 4500} log prefix "VPN-UDP: " drop
+        tcp dport {1723, 1194} log prefix "VPN-TCP: " drop
+
+        # Bloqueio UDP alto (rádio/mídia)
+        udp dport 1024-65535 log prefix "UDP-MEDIA: " drop
+
+        ########################################
+        # WEB NORMAL
+        ########################################
+        tcp dport {80,443} accept
+        udp dport 53 accept
+        tcp dport 53 accept
+    }
+
+    chain output {
+        type filter hook output priority 0;
+        policy accept;
+    }
+}
+
+
+
+
+ip daddr != 192.168.0.9 udp dport 53 drop
+
+
+journalctl -f
+
+
+apt install rsyslog
+
+
+nano /etc/rsyslog.d/firewall.conf
+
+:msg,contains,"BLOCK" /var/log/firewall.log
+& stop
+
+
+systemctl restart rsyslog
+
+
+tcp flags & (syn|ack) == syn limit rate 20/second accept
+
+
+
+# Bloqueio de scans
+ct state invalid drop
+
+# Proteção contra flood
+ip protocol icmp limit rate 5/second accept
+
+
+
+
+
+

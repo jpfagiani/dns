@@ -1,0 +1,39 @@
+apt update
+apt install suricata -y
+
+nano /etc/suricata/suricata.yaml
+
+af-packet:
+  - interface: eth1
+
+
+af-packet:
+  - interface: eth1
+    copy-mode: ips
+    copy-iface: eth1
+
+
+/var/log/suricata/
+
+
+apt install netdata -y
+
+
+http://IP_DO_SERVIDOR:19999
+
+
+ip link add link eth1 name eth1.10 type vlan id 10
+ip addr add 192.168.10.1/24 dev eth1.10
+ip link set eth1.10 up
+
+
+apt install libnss-ldap sssd
+
+nano /usr/local/sbin/firewall-report.sh
+
+#!/bin/bash
+echo "Relatório Firewall - $(date)" > /var/log/firewall_report.txt
+grep BLOCK /var/log/firewall.log >> /var/log/firewall_report.txt
+
+crontab -e
+
